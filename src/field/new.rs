@@ -1,13 +1,13 @@
-use proc_macro;
+use proc_macro2;
 
-use proc_macro::TokenStream;
-use quote::{quote, format_ident};
-use syn::{DeriveInput, Ident, Type};
+use proc_macro2::{TokenStream};
+use quote::{quote
+    , ToTokens};
+use syn::{DeriveInput};
+use core::str::FromStr;
 
-type CB = fn(struct_ident: &Ident, field_ident: &Ident, typ: &Type) -> TokenStream;
-
-fn iter(input: TokenStream, f: CB) -> TokenStream {
-    let derive: DeriveInput = syn::parse(input).unwrap();
+pub fn new_with_all(input: TokenStream) -> TokenStream {
+    let derive: DeriveInput = syn::parse2(input).unwrap();
     let ident = &derive.ident;
     let s = match derive.data {
         syn::Data::Struct(s) => {
@@ -27,7 +27,13 @@ fn iter(input: TokenStream, f: CB) -> TokenStream {
     };
     let fields = n.named;
     let mut ts = TokenStream::new();
+    let mut fs = TokenStream::new();
+    let mut index = 0;
+    let len = fields.len();
     for field in fields.iter() {
+        if index > 0 {
+            ts.extend::<TokenStream>(TokenStream::from_str(",").expect("should not happend"));
+        }
         let typ = &field.ty;
         let field_ident = match &field.ident {
             Some(id) => id,
@@ -38,15 +44,33 @@ fn iter(input: TokenStream, f: CB) -> TokenStream {
                 unimplemented!("tuple struct");
             }
         };
-        let t = f(&ident, &field_ident, &typ);
-        ts.extend::<TokenStream>(t);
+        field_ident.to_tokens(&mut ts);
+        ts.extend::<TokenStream>(TokenStream::from_str(":").expect("should not happend"));
+        typ.to_tokens(&mut ts);
+        // ts.extend::<TokenStream>(field_ident.into());
+        index += 1;
+
+        field_ident.to_tokens(&mut fs);
+        fs.extend::<TokenStream>(TokenStream::from_str(":").expect("should not happend"));
+        field_ident.to_tokens(&mut fs);
+        fs.extend::<TokenStream>(TokenStream::from_str(",").expect("should not happend"));
+        if index == len - 1 {
+            fs.extend::<TokenStream>(TokenStream::from_str("\n").expect("should not happend"));
+        }
     }
-    ts
+    let expanded = quote! {
+        impl #ident {
+            pub fn new(#ts) -> Self {
+                Self {
+                    #fs
+                }
+            }
+        }
+    };
+    expanded.into()
 }
 
 /*
- * 为结构中的每一个成员提供获取接口
- * */
 fn ref_move_cb(struct_ident: &Ident, field_ident: &Ident, typ: &Type) -> TokenStream {
     let ref_id = format_ident!("{}_ref", &field_ident);
     let mut_id = format_ident!("{}_mut", &field_ident);
@@ -87,4 +111,5 @@ fn clone_cb(struct_ident: &Ident, field_ident: &Ident, typ: &Type) -> TokenStrea
 pub fn clone(input: TokenStream) -> TokenStream {
     iter(input, clone_cb)
 }
+*/
 
